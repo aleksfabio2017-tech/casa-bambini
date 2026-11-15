@@ -25,7 +25,7 @@ function renderHead(){
       CHILDREN.map(n=>'<button data-child="'+n+'" aria-pressed="'+(n===c)+'"><i class="av" aria-hidden="true">'+n.charAt(0)+'</i>'+n+'</button>').join("")+
     '</div><span class="tright">'+statusChip()+
       '<button class="gear" data-go="impostazioni" aria-label="Impostazioni"'+(tab==="impostazioni"?' aria-current="page"':'')+'><svg viewBox="0 0 24 24" aria-hidden="true">'+ICONS.impostazioni+'</svg></button></span></div>'+
-    '<h1 class="sr">'+esc(c)+'</h1><div class="hsub"><b>'+esc(c)+'</b> · '+age+' · '+esc(longDate(now))+'</div>';
+    '<h1 class="sr">'+esc(c)+'</h1><div class="hsub"><b>'+esc(c)+'</b> · '+age+' · '+esc(longDate(now))+(P.chi?' · '+esc(P.chi):'')+'</div>';
 }
 
 const NAV = [["oggi","Oggi"],["crescita","Crescita"],["+","Aggiungi"],["salute","Salute"],["diario","Diario"]];

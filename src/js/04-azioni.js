@@ -1,7 +1,7 @@
 /* ---------- azioni ---------- */
 function setChild(c){ S.child=c; save(); document.documentElement.dataset.child=c; render(); }
-function go(t){ tab=t; tOpen=null; tErr=""; hForm=""; hErr=""; hVk=""; hAllEdit=false; pdMsg=""; pdErr=""; try{ history.replaceState(null,"","#"+t); }catch(e){} render(); $("main").focus({preventScroll:true}); window.scrollTo(0,0);
-  if((t==="nanna"||t==="diario"||t==="oggi"||t==="attivita"||t==="sviluppo"||t==="pediatra"||t==="salute"||t==="settimana"||t==="riepilogo") && mcp && !syncing && (!S.lastSync || Date.now()-S.lastSync > 2*60000)) sync(false); }
+function go(t){ tab=t; tOpen=null; tErr=""; hForm=""; hErr=""; hVk=""; hAllEdit=false; pdMsg=""; pdErr=""; bkMsg=""; setErr=""; try{ history.replaceState(null,"","#"+t); }catch(e){} render(); $("main").focus({preventScroll:true}); window.scrollTo(0,0);
+  if((t==="nanna"||t==="diario"||t==="oggi"||t==="attivita"||t==="sviluppo"||t==="pediatra"||t==="salute"||t==="settimana"||t==="riepilogo") && ponteOk() && !syncing && (!S.lastSync || Date.now()-S.lastSync > 2*60000)) sync(false); }
 
 function addMeasure(){
   const v = id=>$(id) ? $(id).value : "";

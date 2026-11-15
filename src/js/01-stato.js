@@ -23,7 +23,6 @@ function save(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(S)); }catch(e)
 let S = load();
 let tab = "oggi";
 let metric = "peso";
-let mcp = null, perms = null;
 let net = {state:"connecting", code:null, msg:""};
 let syncing = false;
 let formError = "";

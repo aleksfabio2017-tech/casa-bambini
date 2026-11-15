@@ -1,47 +1,37 @@
 /* ---------- collegamento al foglio ---------- */
 function errInfo(e){
-  const code = (e && e.code) || "upstream_error";
+  const code = (e && e.code) || "errore_ponte";
+  const det = e && e.message ? e.message : "";
+  const app = "Il ponte ha rifiutato la richiesta ("+code+"): va aggiornato il ponte o l'app. I dati restano sul telefono.";
   const map = {
-    server_not_connected:"Il connettore Google Sheets non è collegato a questo account. Aggiungilo da claude.ai, Impostazioni → Connettori.",
-    needs_reauth:"Il collegamento a Google Sheets è scaduto. Ricollegalo da claude.ai, Impostazioni → Connettori.",
-    selection_required:"Ci sono più connettori Google Sheets: scegli quale usare quando claude.ai te lo chiede, poi sincronizza.",
-    not_in_manifest:"L'accesso al foglio è stato negato per questa pagina. Riattivalo dai permessi della pagina.",
-    approval_required:"Serve il tuo consenso per leggere e scrivere il foglio.",
-    blocked_by_policy:"L'organizzazione blocca l'uso di Google Sheets da questa pagina.",
-    server_unavailable:"Google Sheets non risponde in questo momento. I dati restano sul telefono e partono alla prossima sincronizzazione.",
-    tool_error:"Google Sheets ha rifiutato la richiesta: " + (e && e.message ? e.message : "errore sconosciuto") + ".",
-    not_granted:"Questa vista non può usare i connettori: apri la pagina dall'app Claude o da claude.ai con l'account di famiglia.",
-    capability_disabled:"Questa vista non può usare i connettori: apri la pagina dall'app Claude o da claude.ai con l'account di famiglia."
+    ponte_mancante:"Manca il collegamento al foglio: inserisci qui sotto l'indirizzo del ponte e la chiave.",
+    senza_rete:"Il telefono è senza rete. I dati restano qui e partono quando torna la connessione.",
+    rete:"Il foglio non è raggiungibile (rete assente o instabile). I dati restano sul telefono e partono alla prossima sincronizzazione.",
+    tempo_scaduto:"Il foglio ci mette troppo a rispondere. I dati restano sul telefono e partono alla prossima sincronizzazione.",
+    token_errato:"La chiave non è giusta: controllala qui sotto. Se è stata cambiata, inserisci quella nuova.",
+    ponte_non_configurato:"Il ponte non ha ancora la sua chiave: va messa in Apps Script, Proprietà dello script, voce TOKEN.",
+    risposta_non_valida:"Il ponte ha risposto con una pagina invece che con i dati: controlla l'indirizzo (deve finire con /exec) e che il deployment abbia accesso «Chiunque».",
+    ponte_http:"Il ponte ha risposto con un errore"+(det?" (HTTP "+det+")":"")+": controlla l'indirizzo. I dati restano sul telefono.",
+    errore_foglio:"Google Sheets ha dato un errore"+(det?": "+det:"")+". I dati restano sul telefono e partono alla prossima sincronizzazione.",
+    json_non_valido:app, azione_non_ammessa:app, range_non_valido:app, scheda_non_ammessa:app,
+    sola_lettura:app, valori_non_validi:app, troppi_dati:app
   };
   return {code, msg: map[code] || "Collegamento al foglio non riuscito. I dati restano sul telefono e partono alla prossima sincronizzazione."};
 }
-async function call(tool, input){
-  const r = await mcp.callTool(SERVER, tool, input, {cache:false});
-  let p = r && r.payload !== undefined ? r.payload : r;
-  if(typeof p === "string"){ try{ p = JSON.parse(p); }catch(e){} }
-  return p;
-}
-async function read(range){
-  const go = async ()=>{ const p = await call("get_values", {spreadsheetId:SHEET_ID, range}); return (p && Array.isArray(p.values)) ? p.values : []; };
-  try{ return await go(); }
-  catch(e){
-    if(e && e.retryable){ await new Promise(r=>setTimeout(r, (e.retryAfterMs||800) + Math.random()*700)); return await go(); }
-    throw e;
-  }
-}
+async function read(range){ return await dati.leggi(range); }
 /* Scrive righe nuove: su scheda vuota la prima va in riga 2 (già formattata), le altre in coda */
 async function pushRows(sheet, lastCol, hasData, vals){
   if(!vals.length) return;
   if(!hasData){
-    await call("update_values", {spreadsheetId:SHEET_ID, range:sheet+"!A2:"+lastCol+"2", values:[vals[0]]});
-    if(vals.length>1) await call("append_values", {spreadsheetId:SHEET_ID, range:sheet+"!A1:"+lastCol+"1", values:vals.slice(1)});
+    await dati.aggiorna(sheet+"!A2:"+lastCol+"2", [vals[0]]);
+    if(vals.length>1) await dati.aggiungi(sheet+"!A1:"+lastCol+"1", vals.slice(1));
   }else{
-    await call("append_values", {spreadsheetId:SHEET_ID, range:sheet+"!A1:"+lastCol+"1", values:vals});
+    await dati.aggiungi(sheet+"!A1:"+lastCol+"1", vals);
   }
 }
 async function sync(manual){
   if(syncing) return;
-  if(!mcp){ net={state:"offline",code:"not_granted",msg:errInfo({code:"not_granted"}).msg}; render(); if(manual) toast("Foglio non raggiungibile da qui"); return; }
+  if(!ponteOk()){ net={state:"offline",code:"ponte_mancante",msg:errInfo({code:"ponte_mancante"}).msg}; render(); if(manual) toast("Imposta prima il collegamento al foglio"); return; }
   syncing = true; net = Object.assign({}, net, {state:"syncing"}); render();
   let sent = 0;
   try{
@@ -50,7 +40,7 @@ async function sync(manual){
     for(const c of Object.keys(S.qs.allerg)){
       const i = bam.findIndex(r=>r && r[0]===c);
       if(i<0){ delete S.qs.allerg[c]; continue; }
-      await call("update_values", {spreadsheetId:SHEET_ID, range:"Bambini!E"+(i+2), values:[[S.qs.allerg[c].text]]});
+      await dati.aggiorna("Bambini!E"+(i+2), [[S.qs.allerg[c].text]]);
       bam[i][4] = S.qs.allerg[c].text; delete S.qs.allerg[c]; sent++; save();
     }
     S.allerg = {}; bam.forEach(r=>{ if(r && CHILDREN.includes(r[0])) S.allerg[r[0]] = String(r[4]||""); });
@@ -158,9 +148,5 @@ async function sync(manual){
   }finally{
     syncing = false; render();
   }
-}
-async function openPerms(){
-  try{ if(perms){ await perms.manage(); sync(true); return; } }catch(e){}
-  toast("Apri il menu Permessi della pagina in claude.ai");
 }
 

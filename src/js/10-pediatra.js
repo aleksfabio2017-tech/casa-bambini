@@ -354,25 +354,26 @@ async function pdBuild(c){
   return await doc.save();
 }
 
+/* download normale: Blob + link (al posto della capacità "downloads" di claude.ai) */
+function scaricaFile(name, blob){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name; a.rel = "noopener"; a.style.display = "none";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 60000);
+}
 async function pdDownload(){
   if(pdBusy) return;
   const c=S.child; pdBusy=true; pdErr=""; pdMsg=""; render();
   try{
-    const dl = await window.claude?.use?.("downloads");
-    if(!dl) throw {code:"unavailable"};
     const bytes = await pdBuild(c);
     const name = "Riepilogo pediatra - "+c+" - "+dayKey(new Date())+".pdf";
-    await dl.save({filename:name, data:new Blob([bytes],{type:"application/pdf"})});
-    pdMsg = "PDF pronto: "+name;
+    scaricaFile(name, new Blob([bytes],{type:"application/pdf"}));
+    pdMsg = "PDF pronto: "+name+" (lo trovi nei Download).";
   }catch(e){
     const code = (e && e.code) || "";
-    pdErr = code==="declined" ? "" :
-      code==="lib" ? "Non riesco a caricare lo strumento per creare il PDF: controlla la connessione e riprova." :
-      code==="rate_limited" ? "C’è già una richiesta di salvataggio aperta: rispondi a quella, poi riprova." :
-      code==="too_large" ? "Il PDF è troppo grande per questa destinazione: prova senza grafici." :
-      (code==="unavailable"||code==="not_granted"||code==="capability_disabled"||code==="capability_removed"||code==="extension_not_enabled") ? "In questa vista non si può scaricare il file: apri l’app dal link in claude.ai o dall’app Claude." :
+    pdErr = code==="lib" ? "Non riesco a caricare lo strumento per creare il PDF: controlla la connessione e riprova." :
       "Qualcosa non ha funzionato nel creare il PDF. Riprova; se capita ancora, prova a togliere i grafici.";
-    if(code==="declined") pdMsg = "Salvataggio annullato.";
   }
   pdBusy=false; render();
 }
@@ -381,15 +382,67 @@ function viewSoon(title, phase, text){
   return '<h2>'+title+'</h2><div class="panel"><p class="lead">'+text+'</p><p class="lead" style="margin-top:8px">Arriva nella '+phase+'.</p></div>';
 }
 
+/* ---------- impostazioni: collegamento, chi sei, backup (fase 3) ---------- */
+let setOpen=false, setShow=false, setBusy=false, setErr="", setUrl=null, setTok=null, bkMsg="";
+async function salvaPonte(){
+  const u = ($("s-url") ? $("s-url").value : "").trim(), k = ($("s-tok") ? $("s-tok").value : "").trim();
+  setUrl=u; setTok=k; setErr="";
+  if(!ponteUrlValido(u)) setErr = "L’indirizzo deve iniziare con https:// e finire con /exec.";
+  else if(k.length<32) setErr = "La chiave sembra troppo corta: copiala tutta.";
+  if(setErr){ render(); return; }
+  const prima = {url:P.url, token:P.token};
+  P.url=u; P.token=k; setBusy=true; render();
+  try{
+    const r = await dati.leggi("Bambini!A2:C");
+    if(!r.some(x=>x && CHILDREN.includes(x[0]))) throw {code:"risposta_non_valida"};
+    ponteSave(); setOpen=false; setUrl=null; setTok=null; setShow=false; setBusy=false;
+    toast("Collegato al foglio"); sync(true);
+  }catch(e){
+    P.url=prima.url; P.token=prima.token; setBusy=false;
+    setErr = "Prova non riuscita: "+errInfo(e).msg;
+    render();
+  }
+}
+function setChi(x){ P.chi = P.chi===x ? "" : x; ponteSave(); render(); }
+function backupScarica(){
+  const n = new Date();
+  const dati_ = {app:"casa-bambini", versione:VERSIONE, creato:n.toISOString(), chiave:LS_KEY, stato:S};
+  scaricaFile("Casa Bambini - backup - "+dayKey(n)+" "+pad(n.getHours())+pad(n.getMinutes())+".json",
+    new Blob([JSON.stringify(dati_, null, 1)], {type:"application/json"}));
+  bkMsg = "Backup scaricato: lo trovi nei Download."; render();
+}
+function backupRipristina(file){
+  if(!file) return;
+  const fr = new FileReader();
+  fr.onload = ()=>{
+    let o = null; try{ o = JSON.parse(String(fr.result||"")); }catch(e){}
+    const st = o && o.app==="casa-bambini" && o.stato && typeof o.stato==="object" ? o.stato : null;
+    if(!st){ bkMsg = "Questo file non è un backup di Casa Bambini."; render(); return; }
+    const quando = o.creato ? new Date(o.creato) : null;
+    if(!confirm("Ripristinare il backup"+(quando && !isNaN(quando) ? " del "+shortDate(quando)+", "+timeOf(quando.getTime()) : "")+"?\nI dati di questo dispositivo vengono sostituiti; quelli già nel foglio non si toccano.")) return;
+    const vecchio = localStorage.getItem(LS_KEY);
+    try{ localStorage.setItem(LS_KEY, JSON.stringify(st)); S = load(); save(); }
+    catch(e){ if(vecchio!=null) localStorage.setItem(LS_KEY, vecchio); S = load(); bkMsg = "Ripristino non riuscito: i dati di prima sono rimasti."; render(); return; }
+    bkMsg = "Backup ripristinato."+(pendingCount() ? " "+plural(pendingCount(),"dato in attesa","dati in attesa")+": parte alla sincronizzazione." : "");
+    render(); if(ponteOk()) sync(false);
+  };
+  fr.readAsText(file);
+}
+
 function viewImpostazioni(){
   const q=pendingCount();
   const qTxt = [[S.queue.length,"misura","misure"],[S.qs.sonno.length,"nanna","nanne"],[S.qs.diario.length,"nota","note"],[S.qs.attivita.length,"attività","attività"],[S.qs.sviluppo.length,"tappa","tappe"],[S.qs.appunt.length,"appuntamento","appuntamenti"],[S.qs.salute.length,"dato di salute","dati di salute"],[Object.keys(S.qs.allerg).length,"nota allergie","note allergie"],[S.qs.sett.length,"settimana","settimane"],[S.qs.asilo.length,"giornata d’asilo","giornate d’asilo"]].filter(x=>x[0]).map(x=>plural(x[0],x[1],x[2])).join(", ");
-  let h = '<h2>Foglio Google</h2><div class="panel">';
-  if(net.state==="error"||net.state==="offline"){
-    h += '<div class="notice"><p>'+esc(net.msg)+'</p>'+
-      (net.code==="not_in_manifest"?'<p><button class="btn small" id="perm">Apri i permessi</button></p>':'')+
-      (net.code==="approval_required"?'<p><button class="btn small" id="sync2">Consenti e sincronizza</button></p>':'')+
-      '</div>';
+  const conf = !ponteOk() || setOpen;
+  let h = '<h2>Collegamento al foglio</h2><div class="panel">';
+  if(net.state==="error"||net.state==="offline") h += '<div class="notice"><p>'+esc(net.msg)+'</p></div>';
+  if(conf){
+    h += '<p class="lead" style="margin:0 0 14px">Indirizzo del ponte e chiave si inseriscono una volta sola e restano solo su questo dispositivo.</p>'+
+      '<div class="field"><label for="s-url">Indirizzo del ponte</label><input id="s-url" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec" value="'+esc(setUrl!=null?setUrl:P.url)+'"></div>'+
+      '<div class="field"><label for="s-tok">Chiave</label><input id="s-tok" type="'+(setShow?"text":"password")+'" autocomplete="off" autocapitalize="off" spellcheck="false" value="'+esc(setTok!=null?setTok:P.token)+'">'+
+      '<span class="hint"><button class="btn ghost small" id="s-show" type="button">'+(setShow?"Nascondi":"Mostra")+'</button></span></div>'+
+      (setErr?'<p class="formerr" role="alert">'+esc(setErr)+'</p>':'')+
+      '<p style="margin:0 0 6px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="s-save" '+(setBusy?"disabled":"")+'>'+(setBusy?"Provo…":"Salva e prova")+'</button>'+
+      (ponteOk()?'<button class="btn ghost" id="s-cancel">Annulla</button>':'')+'</p>';
   }
   h += '<dl class="kv">'+
     '<dt>Stato</dt><dd>'+(syncing?"Sincronizzo…":net.state==="ok"?"Collegato":net.state==="connecting"?"In collegamento…":"Non collegato")+'</dd>'+
@@ -404,13 +457,23 @@ function viewImpostazioni(){
     '<dt>Asilo</dt><dd>'+plural(S.asilo.length,"giornata","giornate")+' nel foglio</dd>'+
     '<dt>Dati di Edo</dt><dd>'+(S.edo? plural((S.edo.mis||[]).length,"missione","missioni")+", "+plural((S.edo.err||[]).length,"errore","errori")+", "+plural((S.edo.gio||[]).length,"sessione","sessioni")+" di gioco" : "non ancora letti")+'</dd>'+
     '<dt>Foglio</dt><dd><a href="'+SHEET_URL+'" target="_blank" rel="noopener">(FAB) Bambini – Database app</a></dd>'+
-  '</dl><p style="margin:16px 0 0"><button class="btn full" id="sync" '+(syncing?"disabled":"")+'>Sincronizza ora</button></p></div>';
+    (ponteOk()?'<dt>Ponte</dt><dd>impostato · <button class="btn ghost small" id="s-edit">Cambia</button></dd>':'')+
+  '</dl><p style="margin:16px 0 0"><button class="btn full" id="sync" '+(syncing||!ponteOk()?"disabled":"")+'>Sincronizza ora</button></p></div>';
+
+  h += '<h2>Chi sei</h2><div class="panel"><div class="seg" role="group" aria-label="Chi usa questo dispositivo" style="margin:0">'+
+    ["Babbo","Mamma"].map(x=>'<button data-chi="'+x+'" aria-pressed="'+(P.chi===x)+'">'+x+'</button>').join("")+
+    '</div><p class="lead" style="font-size:14px;margin:10px 0 0">Vale solo per questo dispositivo; nel foglio l’origine resta «app-genitori».</p></div>';
 
   h += '<h2>Bambini</h2><div class="panel"><dl class="kv">'+
     CHILDREN.map(c=>{ const b=birthOf(c); return '<dt>'+c+'</dt><dd>'+(b? "nato"+(c==="Sibilla"?"a":"")+" il "+b.getDate()+" "+MESI[b.getMonth()]+" "+b.getFullYear() : "data non letta")+'</dd>'; }).join("")+
     '</dl><p class="lead" style="font-size:14px;margin:12px 0 0">Le date di nascita si cambiano nel foglio, scheda Bambini.</p></div>';
 
-  h += '<h2>Versione</h2><div class="panel"><p class="lead" style="margin:0">Sviluppo completato il 25 ottobre 2026 (blocco 5f); asilo di Sibilla aggiunto il 28 ottobre 2026. Per correzioni o idee nuove: una chat nel progetto «FABIO – Bambini» con il file di progetto.</p></div>';
+  h += '<h2>Backup</h2><div class="panel"><p class="lead" style="margin:0 0 14px">Il backup contiene tutti i dati salvati su questo dispositivo, compresi quelli in attesa di invio. Non contiene la chiave del ponte.</p>'+
+    (bkMsg?'<p class="lead" role="status" style="margin:0 0 12px;font-weight:700">'+esc(bkMsg)+'</p>':'')+
+    '<p style="margin:0;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="bk-down">Scarica backup JSON</button>'+
+    '<button class="btn ghost" id="bk-up">Ripristina da file</button><input type="file" id="bk-file" accept="application/json,.json" hidden></p></div>';
+
+  h += '<h2>Versione</h2><div class="panel"><p class="lead" style="margin:0">Casa Bambini '+VERSIONE+' · app installabile, '+VERSIONE_DATA+'. I dati restano nel foglio «(FAB) Bambini – Database app». Per correzioni o idee nuove: una sessione Claude Code sul repository casa-bambini, con il piano del progetto «FABIO – Bambini».</p></div>';
   return h;
 }
 

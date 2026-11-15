@@ -92,7 +92,13 @@ document.addEventListener("click", e=>{
   if(t.id==="h-app"){ pOpen=true; pTipo="visita"; go("oggi"); return; }
   if(t.dataset.delh){ const id=t.dataset.delh; S.qs.salute = S.qs.salute.filter(q=>q.id!==id && q.ep!==id); save(); toast("Eliminato"); render(); return; }
   if(t.id==="sync"||t.id==="sync2"){ sync(true); return; }
-  if(t.id==="perm"){ openPerms(); return; }
+  if(t.id==="s-save"){ salvaPonte(); return; }
+  if(t.id==="s-show"){ setUrl=$("s-url")?$("s-url").value:setUrl; setTok=$("s-tok")?$("s-tok").value:setTok; setShow=!setShow; render(); return; }
+  if(t.id==="s-edit"){ setOpen=true; setErr=""; render(); const el=$("s-url"); if(el) el.focus(); return; }
+  if(t.id==="s-cancel"){ setOpen=false; setErr=""; setUrl=null; setTok=null; setShow=false; render(); return; }
+  if(t.dataset.chi){ setChi(t.dataset.chi); return; }
+  if(t.id==="bk-down"){ backupScarica(); return; }
+  if(t.id==="bk-up"){ const el=$("bk-file"); if(el) el.click(); return; }
 });
 
 document.addEventListener("input", e=>{
@@ -105,6 +111,7 @@ document.addEventListener("input", e=>{
 document.addEventListener("keydown", e=>{ if(e.key==="Escape" && shOpen) closeSheet(); });
 
 document.addEventListener("change", e=>{
+  if(e.target && e.target.id==="bk-file"){ const f=e.target.files && e.target.files[0]; e.target.value=""; backupRipristina(f); return; }
   if(e.target && (e.target.id==="r-letto" || e.target.id==="r-sveglia") && rv){ if(e.target.value){ rv[e.target.id==="r-letto"?"letto":"sveglia"] = e.target.value; } render(); return; }
   if(e.target && e.target.id==="as-day" && asF){ const v=e.target.value; if(dayFromKey(v)){ if(asiloMap(S.child)[v] || asF.had) asInit(S.child, v); else asF.day=v; asF.err=""; render(); } return; }
   if(e.target && e.target.id==="n-day"){ const v=e.target.value; if(dayFromKey(v)){ nDay=v; nVal=null; nErr=""; render(); } }
