@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="it"><head><meta charset="utf-8"><title>Prove Casa Bambini</title></head>
+<body><pre id="out">in corso…</pre>
+<iframe id="app" style="width:420px;height:800px"></iframe>
+<script>
+/* Fa girare l'app costruita (_app_prova.html, con il ponte finto) in un iframe e controlla cosa arriva nel "foglio".
+   Si apre con Chrome headless (vedi costruisci.py --verifica). Risultato in #out: riga finale "ESITO: OK" o "ESITO: ERRORE". */
+const URL_PONTE = "https://script.google.com/macros/s/PROVA/exec";
+const TOKEN = "prova-prova-prova-prova-prova-prova-1234";
+const righe = []; let ko = 0;
+const ok = (cond, txt)=>{ righe.push((cond?"ok   ":"NO   ")+txt); if(!cond) ko++; };
+const foglio = ()=>JSON.parse(localStorage.getItem("prova-foglio") || '{"schede":{},"chiamate":[]}');
+const app = ()=>JSON.parse(localStorage.getItem("casa-bambini-v1") || "null");
+const pausa = ms=>new Promise(r=>setTimeout(r, ms));
+async function apri(hash){
+  const f = document.getElementById("app");
+  await new Promise(r=>{ f.onload=r; f.src="_app_prova.html?n="+Math.random().toString(36).slice(2,8)+(hash||""); });
+  /* aspetta che la sincronizzazione sia finita: niente "Sincronizzo" nell'intestazione per 300 ms */
+  let quiete=0;
+  for(let i=0;i<200 && quiete<6;i++){ await pausa(50); const d=f.contentDocument; const s=d && d.querySelector(".dot"); quiete = (s && !/Sincronizzo/.test(s.textContent)) ? quiete+1 : 0; }
+  return f.contentDocument;
+}
+function base(){
+  localStorage.clear();
+  localStorage.setItem("prova-foglio", JSON.stringify({chiamate:[], schede:{
+    "Bambini":[["Nome"],["Sibilla","27/10/2025","F"],["Edoardo","27/08/2020","M"]],
+    "Crescita":[["ID"]], "Sonno":[["ID"]], "Attività":[["ID"]], "Sviluppo":[["ID"]], "Appuntamenti":[["ID"]],
+    "Salute":[["ID"]], "Asilo":[["ID"]], "Settimane":[["ID"]],
+    "Diario":[["ID"],["chat-diario-1",46340.5,"Sibilla","ricordo","Nota scritta da Claude in chat","","chat"]],
+    "Edo - Missioni":[["ID"]], "Edo - Errori":[["ID"]], "Edo - Giochi":[["ID"]], "Edo - Uso":[["ID"]]}}));
+}
+function ponte(token){ localStorage.setItem("casa-bambini-ponte", JSON.stringify({url:URL_PONTE, token:token||TOKEN, chi:"Babbo"})); }
+function coda(diario, misure){
+  const s = {child:"Sibilla", queue:misure||[], qs:{sonno:[], diario:diario, attivita:[], sviluppo:[], appunt:[], salute:[], allerg:{}, sett:[], asilo:[]}};
+  localStorage.setItem("casa-bambini-v1", JSON.stringify(s));
+}
+const nota = (id, testo)=>({id, data:"2026-11-15 10:00", bambino:"Sibilla", cat:"ricordo", testo, foto:""});
+(async ()=>{
+  try{
+    /* 1. primo avvio senza ponte → Impostazioni */
+    base();
+    let d = await apri();
+    ok(d.getElementById("s-url") && d.getElementById("s-tok"), "senza ponte si apre la pagina Impostazioni con indirizzo e chiave");
+    ok(foglio().chiamate.length===0, "senza ponte non parte nessuna chiamata");
+    ok(!/claude\.ai/.test(d.getElementById("main").innerText), "nessun testo rimanda a claude.ai");
+
+    /* 2. sincronizzazione: lettura e scrittura del diario, anti-doppioni */
+    base(); ponte(); coda([nota("genitori-diario-1763200000001","Prima nota"), nota("genitori-diario-1763200000002","Seconda nota")],
+      [{id:"genitori-crescita-1763200000003", data:"2026-11-15 09:00", bambino:"Sibilla", peso:8.1, altezza:74, cc:null, dove:"casa", note:"", origine:"app-genitori"}]);
+    d = await apri();
+    let f = foglio(), dia = f.schede["Diario"];
+    ok(dia.length===4 && dia[2][0]==="genitori-diario-1763200000001" && dia[3][4]==="Seconda nota", "le 2 note del diario arrivano nel foglio, dopo quella scritta in chat");
+    ok(typeof dia[2][1]==="number", "la data è scritta come numero-data di Sheets");
+    const cre = f.schede["Crescita"];
+    ok(cre.length===2 && cre[1][0]==="genitori-crescita-1763200000003" && cre[1][3]===8.1, "la misura su scheda vuota va in riga 2 (aggiorna A2)");
+    ok(f.chiamate.some(c=>c.azione==="aggiorna" && c.range==="Crescita!A2:I2"), "su scheda vuota la prima riga usa aggiorna su A2");
+    ok(f.chiamate.some(c=>c.azione==="aggiungi" && c.range==="Diario!A1:G1" && c.righe===2), "su scheda piena le righe vanno con aggiungi su A1:G1");
+    ok(!f.chiamate.some(c=>c.azione!=="leggi" && /^'Edo/.test(c.range)), "le schede di Edo sono solo lette");
+    ok(app().qs.diario.length===0 && app().queue.length===0, "la coda locale si svuota");
+    ok(d.querySelector(".dot.ok"), "l'intestazione mostra il foglio collegato");
+    const n1 = f.chiamate.filter(c=>c.azione!=="leggi").length;
+    d = await apri();
+    f = foglio();
+    ok(f.chiamate.filter(c=>c.azione!=="leggi").length===n1 && f.schede["Diario"].length===4, "una seconda sincronizzazione non scrive doppioni");
+
+    /* 3. nota già arrivata nel foglio ma ancora in coda (risposta persa) → non si riscrive */
+    const s3 = app(); s3.qs.diario=[nota("genitori-diario-1763200000002","Seconda nota")]; localStorage.setItem("casa-bambini-v1", JSON.stringify(s3));
+    d = await apri();
+    ok(foglio().schede["Diario"].length===4 && app().qs.diario.length===0, "una riga già nel foglio e ancora in coda non viene riscritta");
+
+    /* 4. senza rete: i dati restano in coda, poi partono una volta sola */
+    localStorage.setItem("prova-config", JSON.stringify({rete:false}));
+    const s4 = app(); s4.qs.diario=[nota("genitori-diario-1763200000004","Nota offline")]; localStorage.setItem("casa-bambini-v1", JSON.stringify(s4));
+    d = await apri();
+    ok(app().qs.diario.length===1 && d.querySelector(".dot.err"), "senza rete la nota resta in coda e l'intestazione lo segnala");
+    localStorage.setItem("prova-config", "{}");
+    d = await apri();
+    d = await apri();
+    ok(foglio().schede["Diario"].filter(r=>r[0]==="genitori-diario-1763200000004").length===1 && app().qs.diario.length===0, "tornata la rete la nota arriva una volta sola");
+
+    /* 5. scrittura rifiutata dal foglio: la coda resta */
+    localStorage.setItem("prova-config", JSON.stringify({scritturaFallisce:true}));
+    const s5 = app(); s5.qs.diario=[nota("genitori-diario-1763200000005","Nota rifiutata")]; localStorage.setItem("casa-bambini-v1", JSON.stringify(s5));
+    d = await apri("#impostazioni");
+    ok(app().qs.diario.length===1 && /Google Sheets ha dato un errore/.test(d.getElementById("main").innerText), "errore del foglio: la nota resta in coda e c'è il messaggio");
+    localStorage.setItem("prova-config", "{}");
+
+    /* 6. "Edo - Uso" mancante: la sincronizzazione va bene lo stesso */
+    localStorage.setItem("prova-config", JSON.stringify({mancanti:["Edo - Uso"]}));
+    d = await apri();
+    ok(d.querySelector(".dot.ok") && app().qs.diario.length===0, "con «Edo - Uso» mancante la sincronizzazione riesce");
+    localStorage.setItem("prova-config", "{}");
+
+    /* 7. chiave sbagliata */
+    ponte("chiave-sbagliata-chiave-sbagliata-0000");
+    const s7 = app(); s7.qs.diario=[nota("genitori-diario-1763200000007","Nota con chiave sbagliata")]; localStorage.setItem("casa-bambini-v1", JSON.stringify(s7));
+    d = await apri("#impostazioni");
+    ok(/La chiave non è giusta/.test(d.getElementById("main").innerText) && app().qs.diario.length===1, "chiave sbagliata: messaggio chiaro e nota in coda");
+
+    /* 8. Impostazioni: salva e prova */
+    localStorage.removeItem("casa-bambini-ponte");
+    d = await apri();
+    d.getElementById("s-url").value = URL_PONTE; d.getElementById("s-tok").value = TOKEN;
+    d.getElementById("s-save").click(); await pausa(600);
+    const p8 = JSON.parse(localStorage.getItem("casa-bambini-ponte")||"{}");
+    ok(p8.url===URL_PONTE && p8.token===TOKEN, "«Salva e prova» salva indirizzo e chiave dopo una lettura riuscita");
+    ok(foglio().schede["Diario"].some(r=>r[0]==="genitori-diario-1763200000007"), "dopo il salvataggio parte la sincronizzazione");
+    localStorage.removeItem("casa-bambini-ponte");
+    d = await apri();
+    d.getElementById("s-url").value = URL_PONTE; d.getElementById("s-tok").value = "x".repeat(40);
+    d.getElementById("s-save").click(); await pausa(800);
+    ok(!localStorage.getItem("casa-bambini-ponte") && /Prova non riuscita/.test(d.getElementById("main").innerText), "con una chiave sbagliata non salva e lo dice");
+    d.getElementById("s-url").value = "http://esempio.it"; d.getElementById("s-save").click(); await pausa(100);
+    ok(/deve iniziare con https/.test(d.getElementById("main").innerText), "indirizzo non valido: messaggio");
+
+    /* 9. il backup non contiene la chiave */
+    ponte(); d = await apri("#impostazioni");
+    ok(d.getElementById("bk-down") && d.getElementById("bk-up"), "ci sono i pulsanti di backup");
+    ok(!JSON.stringify(app()).includes(TOKEN), "lo stato salvato (e quindi il backup) non contiene la chiave");
+    ok(/2\.0\.0/.test(d.getElementById("main").innerText), "la versione è visibile nelle Impostazioni");
+  }catch(e){ righe.push("ERRORE NELLA PROVA: "+(e && e.stack || e)); ko++; }
+  righe.push("ESITO: "+(ko ? "ERRORE ("+ko+")" : "OK"));
+  document.getElementById("out").textContent = righe.join("\n");
+  document.title = ko ? "ERRORE" : "OK";
+})();
+</script></body></html>

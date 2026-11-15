@@ -441,7 +441,7 @@ function viewImpostazioni(){
       '<div class="field"><label for="s-tok">Chiave</label><input id="s-tok" type="'+(setShow?"text":"password")+'" autocomplete="off" autocapitalize="off" spellcheck="false" value="'+esc(setTok!=null?setTok:P.token)+'">'+
       '<span class="hint"><button class="btn ghost small" id="s-show" type="button">'+(setShow?"Nascondi":"Mostra")+'</button></span></div>'+
       (setErr?'<p class="formerr" role="alert">'+esc(setErr)+'</p>':'')+
-      '<p style="margin:0 0 6px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="s-save" '+(setBusy?"disabled":"")+'>'+(setBusy?"Provo…":"Salva e prova")+'</button>'+
+      '<p style="margin:0 0 20px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="s-save" '+(setBusy?"disabled":"")+'>'+(setBusy?"Provo…":"Salva e prova")+'</button>'+
       (ponteOk()?'<button class="btn ghost" id="s-cancel">Annulla</button>':'')+'</p>';
   }
   h += '<dl class="kv">'+
