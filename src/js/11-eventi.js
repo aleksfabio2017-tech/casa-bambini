@@ -102,6 +102,8 @@ document.addEventListener("click", e=>{
 });
 
 document.addEventListener("input", e=>{
+  if(e.target && e.target.id==="s-url"){ setUrl = e.target.value; return; }
+  if(e.target && e.target.id==="s-tok"){ setTok = e.target.value; return; }
   if(e.target && e.target.id==="pd-q"){ S.pdq[S.child] = e.target.value.slice(0,1000); save(); }
   if(e.target && e.target.id==="r-nota" && rv){ rv.nota = e.target.value.slice(0,500); }
   if(e.target && e.target.dataset && e.target.dataset.asp!==undefined && asF){ const pp=asF.piatti[Number(e.target.dataset.asp)]; if(pp) pp.n = e.target.value.slice(0,80); }

@@ -110,6 +110,9 @@ const nota = (id, testo)=>({id, data:"2026-11-15 10:00", bambino:"Sibilla", cat:
     d.getElementById("s-url").value = URL_PONTE; d.getElementById("s-tok").value = "x".repeat(40);
     d.getElementById("s-save").click(); await pausa(800);
     ok(!localStorage.getItem("casa-bambini-ponte") && /Prova non riuscita/.test(d.getElementById("main").innerText), "con una chiave sbagliata non salva e lo dice");
+    { const u=d.getElementById("s-url"); u.value="https://esempio.it/x/exec"; u.dispatchEvent(new Event("input",{bubbles:true}));
+      d.querySelector("[data-chi]").click(); await pausa(50);
+      ok(d.getElementById("s-url").value==="https://esempio.it/x/exec", "un ridisegno della pagina non svuota l'indirizzo appena scritto"); }
     d.getElementById("s-url").value = "http://esempio.it"; d.getElementById("s-save").click(); await pausa(100);
     ok(/deve iniziare con https/.test(d.getElementById("main").innerText), "indirizzo non valido: messaggio");
 
