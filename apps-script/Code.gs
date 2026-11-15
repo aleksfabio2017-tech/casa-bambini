@@ -21,7 +21,7 @@
  * Niente cancellazioni, niente altre schede; un testo che inizia con "=" si scrive come testo, mai come formula.
  */
 
-var VERSIONE_PONTE = "1.0 (15/11/2026)";
+var VERSIONE_PONTE = "1.1 (15/11/2026)";
 var ID_FOGLIO = "1J7f5P0r4ZrJrZgPpljw3WuzguzlfAGzfHeCmhGDcoiA";
 
 /* Schede ammesse: true = lettura e scrittura, false = solo lettura */
@@ -39,8 +39,7 @@ var SCHEDE = {
   "Edo - Missioni": false,
   "Edo - Errori": false,
   "Edo - Giochi": false,
-  "Edo - Uso": false,
-  "Prova ponte": true   // SOLO PER LE PROVE DELLA FASE 2: da togliere a prove finite
+  "Edo - Uso": false
 };
 
 var MAX_RIGHE = 500;      // righe per singola scrittura

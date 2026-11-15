@@ -8,7 +8,7 @@
 3. A sinistra, **Servizi +** → **Google Sheets API** → *Aggiungi* (identificatore `Sheets`, lascia così).
 4. ⚙️ **Impostazioni progetto** → in fondo **Proprietà dello script** → *Aggiungi proprietà*: nome `TOKEN`, valore = la chiave lunga (non è nel repository) → *Salva*.
 5. Torna all'editor, scegli la funzione `provaLocale` → **Esegui**. La prima volta chiede le autorizzazioni: *Rivedi autorizzazioni* → il tuo account → *Avanzate* → *Vai a Casa Bambini – ponte (non sicuro)* → *Consenti*. Nel registro devono comparire Edoardo e Sibilla.
-6. **Esegui il deployment → Nuovo deployment** → tipo **App web**: *Esegui come*: **Me**; *Chi ha accesso*: **Chiunque** → *Esegui il deployment*. Copia l'**URL dell'app web** (finisce con `/exec`).
+6. **Esegui il deployment → Nuovo deployment** → tipo **App web**: *Esegui come*: **Me**; *Chi ha accesso*: **Chiunque** (proprio "Chiunque": con "Chiunque con account Google" Google risponde con la pagina di accesso e l'app non riceve i dati; la protezione è il token) → *Esegui il deployment*. Copia l'**URL dell'app web** (finisce con `/exec`).
 
 ## Aggiornare il codice dopo una modifica
 Incolla il nuovo `Code.gs` → salva → **Esegui il deployment → Gestisci deployment** → ✏️ → *Versione*: **Nuova versione** → *Esegui il deployment*. L'URL `/exec` resta lo stesso.
@@ -40,8 +40,14 @@ Su una pagina qualsiasi, F12 → Console:
 const U="https://script.google.com/macros/s/…/exec", T="…token…";
 const p=b=>fetch(U,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify(Object.assign({token:T},b))}).then(r=>r.json());
 console.log(await p({azione:"leggi",range:"Bambini!A2:C"}));
-console.log(await p({azione:"aggiungi",range:"'Prova ponte'!A1:D1",valori:[["prova-"+Date.now(),46341.5,9.5,"ciao"]]}));
-console.log(await p({azione:"leggi",range:"'Prova ponte'!A2:D"}));
 console.log(await p({azione:"aggiungi",range:"'Edo - Missioni'!A1:I1",valori:[["no"]]})); // atteso: sola_lettura
 console.log(await p({token:"sbagliato",azione:"leggi",range:"Bambini!A2:C"}));            // atteso: token_errato
 ```
+
+## Prove del 15/11/2026 (versione 1.0, sull'URL vero)
+Tutte superate:
+- letture di Bambini, Crescita e Asilo identiche al connettore (date `2026-10-24 13:44`, numeri `7,8`, celle vuote in mezzo `""`, celle e righe vuote in fondo tolte);
+- scrittura di 2 righe in una scheda di prova: il numero-data `46341.5` è stato salvato come numero e mostrato `2026-11-15 12:00`; `"7,25"` è diventato il numero 7,25; `"=1+1"` è rimasto testo; la rilettura è identica a quella del connettore;
+- una scheda "Edo - …" in scrittura → `sola_lettura`; una scheda fuori lista → `scheda_non_ammessa`; token sbagliato o assente → `token_errato`, senza dati.
+
+Dalla versione 1.1 la scheda di prova non è più nella lista.
